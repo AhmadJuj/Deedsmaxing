@@ -1,0 +1,104 @@
+Here's the full prompt for Replit:
+
+---
+
+**Project: DeedsMaxing — Ramadan Habit Tracker App**
+
+**Stack:** React Native (Expo)
+
+---
+
+**SCREENS & FEATURES:**
+
+**1. Onboarding Screen**
+- Ask for username on first launch
+- Ask for city (for sehri/iftar times)
+- Set daily Niyyah (intention) each morning with a text input prompt
+
+**2. Home Screen**
+- Today's Hijri date display
+- Daily Niyyah reminder at top
+- Deed categories as tabs: Salah, Quran, Charity, Fasting, Dhikr, Family
+- Each category has its own checklist:
+  - Salah: Fajr, Dhuhr, Asr, Maghrib, Isha, Taraweeh, Tahajjud
+  - Quran: Pages read today, Juz tracker (cumulative)
+  - Charity: Gave Sadaqah, Helped someone, Shared food
+  - Fasting: Kept fast, Made sehri, Made dua at iftar
+  - Dhikr: Morning Adhkar, Evening Adhkar, 100x Subhanallah, Istighfar
+  - Family: Called a relative, Made dua for parents, Avoided argument
+- Points per task (10 pts regular, 25 pts bonus tasks)
+- Overall daily progress bar (% of all tasks done)
+
+**3. Last 10 Nights Tracker**
+- Activates on 20th Ramadan automatically
+- Special nightly checklist for Laylatul Qadr preparation
+- Bonus 100 pts per night in last 10
+- Visual countdown to each of the odd nights (21, 23, 25, 27, 29)
+- "Laylatul Qadr Achieved" badge if all odd nights completed
+
+**4. Quran Progress Tracker**
+- Input how many juz completed today
+- Cumulative Ramadan juz tracker (goal: 30 juz by Eid)
+- Visual progress bar toward full Quran completion
+- Milestone badges: "First Juz", "Halfway", "Khatam"
+
+**5. Streaks & Points**
+- Daily streak counter (consecutive days with 50%+ tasks done)
+- Total Ramadan points accumulated
+- Streak freeze mechanic (earn 1 freeze every 7 days)
+- Bonus multiplier on last 10 nights (2x points)
+
+**6. Leaderboard Screen**
+- Global leaderboard (username + points + streak)
+- Friends leaderboard (invite via code)
+- Anonymous mode toggle for humility
+- Rank badges: Bronze, Silver, Gold, Diamond based on points
+
+**7. Badges & Achievements**
+- "First Deed" — complete first task
+- "Full Day" — 100% tasks in a day
+- "Night Warrior" — Tahajjud 5 nights in a row
+- "Generous Soul" — Sadaqah 7 days in a row
+- "Quran Keeper" — Read Quran 10 days in a row
+- "Laylatul Qadr Seeker" — Active all last 10 nights
+- "Khatam" — Completed 30 juz
+- "Iron Streak" — 20 day streak
+- "Ramadan Champion" — Top 10 on leaderboard
+
+**8. Dua & Reminder Screen**
+- Sehri countdown timer + sehri dua
+- Iftar countdown timer + iftar dua
+- Push notifications for sehri (15 mins before) and iftar
+- Daily hadith or ayah displayed
+
+**9. Reflection Journal**
+- One short note per day (max 200 chars)
+- Viewable as a Ramadan diary at end
+- Optional mood tracker (peaceful, struggling, motivated, grateful)
+
+**10. Profile Screen**
+- Username, avatar (emoji-based)
+- Total points, current streak, best streak
+- All earned badges displayed
+- Full Ramadan stats summary
+
+---
+
+**DESIGN:**
+- Dark theme with deep green (#1B4332) and gold (#D4AF37) accents
+- Crescent and star motifs
+- Soft glowing card UI
+- Arabic-inspired geometric border details
+- Smooth tab and screen transitions
+
+---
+
+**STATE & STORAGE:**
+- AsyncStorage for all local persistence
+- Context API for global state (points, streak, tasks)
+- Daily reset logic at midnight (tasks reset, streak updates)
+- Supabase (optional stretch) for real leaderboard sync
+
+---
+
+Paste this directly into Replit Agent. Want me to also write the Supabase schema for the backend leaderboard?
