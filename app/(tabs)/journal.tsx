@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
-import { useApp, Mood } from '@/contexts/AppContext';
+import { useApp, Mood, getToday } from '@/contexts/AppContext';
 
 const MOODS: { id: Mood; icon: string; label: string; color: string }[] = [
   { id: 'peaceful', icon: 'leaf', label: 'Peaceful', color: '#52B788' },
@@ -24,7 +24,7 @@ function formatDateDisplay(dateStr: string): string {
 export default function JournalScreen() {
   const insets = useSafeAreaInsets();
   const { reflections, saveReflection } = useApp();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getToday();
   const todayReflection = reflections[today];
 
   const [note, setNote] = useState(todayReflection?.note || '');

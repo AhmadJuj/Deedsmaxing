@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Platform,
+  View, Text, StyleSheet, ScrollView, Pressable, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { useApp, BADGE_DEFS, getRamadanDay } from '@/contexts/AppContext';
+import { useApp, BADGE_DEFS, getRamadanDay, getToday } from '@/contexts/AppContext';
 
 function StatBox({ label, value, icon, color }: { label: string; value: string | number; icon: string; color?: string }) {
   return (
@@ -24,14 +24,42 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const {
     profile, totalPoints, streak, badges, quranProgress,
-    getDayCompletion, getEffectivePoints,
+    getDayCompletion, getEffectivePoints, logout,
   } = useApp();
-  const today = new Date().toISOString().split('T')[0];
+  const [loggingOut, setLoggingOut] = useState(false);
+  const today = getToday();
   const completion = getDayCompletion(today);
   const earnedBadges = BADGE_DEFS.filter(b => badges[b.id]?.earned);
   const ramadanDay = getRamadanDay();
   const effectivePoints = getEffectivePoints();
   const isLastTen = ramadanDay >= 20;
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            setLoggingOut(true);
+            try {
+              await logout();
+              router.replace('/auth');
+            } catch (e) {
+              console.error('Logout failed:', e);
+              // Force navigate even if logout threw
+              router.replace('/auth');
+            } finally {
+              setLoggingOut(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: Platform.OS === 'web' ? 67 : insets.top }]}>
@@ -125,6 +153,15 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        <Pressable
+          onPress={handleLogout}
+          disabled={loggingOut}
+          style={({ pressed }) => [styles.resetBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="log-out-outline" size={18} color="#E57373" />
+          <Text style={styles.resetBtnText}>{loggingOut ? 'Signing out…' : 'Sign Out'}</Text>
+        </Pressable>
+
         <View style={{ height: Platform.OS === 'web' ? 100 : 90 }} />
       </ScrollView>
     </View>
@@ -201,4 +238,11 @@ const styles = StyleSheet.create({
   badgeInfo: { flex: 1, gap: 2 },
   badgeName: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text },
   badgeDesc: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.textSub },
+  resetBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 20, marginTop: 12, marginBottom: 4,
+    paddingVertical: 14, borderRadius: 16,
+    borderWidth: 1, borderColor: '#E5737340', backgroundColor: '#E5737310',
+  },
+  resetBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#E57373' },
 });

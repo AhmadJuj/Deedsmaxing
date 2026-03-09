@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
-import { useApp } from '@/contexts/AppContext';
+import { useApp, getToday } from '@/contexts/AppContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -43,7 +43,7 @@ export default function OnboardingScreen() {
   };
 
   const handleComplete = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
     completeOnboarding({
       username: username.trim() || 'Believer',
       city: city.trim() || 'Mecca',
@@ -56,10 +56,16 @@ export default function OnboardingScreen() {
   };
 
   const canContinue = () => {
-    if (step === 1) return username.trim().length > 0;
-    if (step === 2) return city.trim().length > 0;
+    if (step === 1) return username.trim().length >= 2;
+    if (step === 2) return city.trim().length >= 2 && isValidTime(sehriTime) && isValidTime(iftarTime);
     return true;
   };
+
+  function isValidTime(t: string): boolean {
+    if (!/^\d{2}:\d{2}$/.test(t)) return false;
+    const [h, m] = t.split(':').map(Number);
+    return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+  }
 
   return (
     <LinearGradient colors={['#071510', '#0A1F14', '#112219']} style={styles.container}>
@@ -176,13 +182,21 @@ function UsernameStep({ username, setUsername, selectedEmoji, setSelectedEmoji }
         <Text style={styles.inputLabel}>Username</Text>
         <TextInput
           value={username}
-          onChangeText={setUsername}
+          onChangeText={t => {
+            // Strip leading whitespace and limit to letters, numbers, spaces, underscores
+            const clean = t.replace(/[^a-zA-Z0-9 _\-'.]/g, '');
+            setUsername(clean);
+          }}
           placeholder="Enter your name..."
           placeholderTextColor={Colors.textDim}
           style={styles.input}
           maxLength={20}
           autoCapitalize="words"
+          autoCorrect={false}
         />
+        {username.length > 0 && username.trim().length < 2 && (
+          <Text style={{ fontSize: 12, color: '#E57373', fontFamily: 'Inter_400Regular' }}>Min 2 characters</Text>
+        )}
       </View>
     </View>
   );
@@ -200,11 +214,15 @@ function CityStep({ city, setCity, sehriTime, setSehriTime, iftarTime, setIftarT
         <Text style={styles.inputLabel}>City</Text>
         <TextInput
           value={city}
-          onChangeText={setCity}
+          onChangeText={t => {
+            const clean = t.replace(/[^a-zA-Z0-9 ,\-']/g, '');
+            setCity(clean);
+          }}
           placeholder="e.g. London, Dubai, Karachi..."
           placeholderTextColor={Colors.textDim}
           style={styles.input}
           maxLength={30}
+          autoCorrect={false}
         />
       </View>
       <View style={styles.timeRow}>
@@ -212,10 +230,16 @@ function CityStep({ city, setCity, sehriTime, setSehriTime, iftarTime, setIftarT
           <Text style={styles.inputLabel}>Sehri Time</Text>
           <TextInput
             value={sehriTime}
-            onChangeText={setSehriTime}
+            onChangeText={t => {
+              // Auto-format digits to HH:MM
+              const digits = t.replace(/\D/g, '').slice(0, 4);
+              if (digits.length <= 2) setSehriTime(digits);
+              else setSehriTime(digits.slice(0, 2) + ':' + digits.slice(2));
+            }}
             placeholder="05:00"
             placeholderTextColor={Colors.textDim}
             style={styles.input}
+            keyboardType="numeric"
             maxLength={5}
           />
         </View>
@@ -224,10 +248,15 @@ function CityStep({ city, setCity, sehriTime, setSehriTime, iftarTime, setIftarT
           <Text style={styles.inputLabel}>Iftar Time</Text>
           <TextInput
             value={iftarTime}
-            onChangeText={setIftarTime}
+            onChangeText={t => {
+              const digits = t.replace(/\D/g, '').slice(0, 4);
+              if (digits.length <= 2) setIftarTime(digits);
+              else setIftarTime(digits.slice(0, 2) + ':' + digits.slice(2));
+            }}
             placeholder="18:30"
             placeholderTextColor={Colors.textDim}
             style={styles.input}
+            keyboardType="numeric"
             maxLength={5}
           />
         </View>

@@ -1,5 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase, signOut } from '@/lib/supabase';
+import {
+  upsertUserProfile,
+  updateUserStats,
+  fetchLeaderboard,
+  syncDailyStats,
+  getUser,
+} from '@/lib/supabase-service';
+import { scheduleDailyStreakReminder, sendTestNotification } from '@/lib/notifications';
 
 export type Mood = 'peaceful' | 'struggling' | 'motivated' | 'grateful';
 
@@ -49,7 +58,6 @@ export interface LeaderboardEntry {
   points: number;
   streak: number;
   emoji: string;
-  isAnonymous: boolean;
 }
 
 export interface Badge {
@@ -68,7 +76,7 @@ export interface AppState {
   niyyah: Record<string, string>;
   leaderboard: LeaderboardEntry[];
   badges: Record<string, Badge>;
-  anonymousMode: boolean;
+  supabaseUserId: string | null;
   isLoaded: boolean;
 }
 
@@ -80,11 +88,17 @@ interface AppContextValue extends AppState {
   addQuranJuz: (date: string, juz: number) => void;
   saveReflection: (date: string, note: string, mood: Mood | null) => void;
   toggleLastNightTask: (night: number, task: string) => void;
-  setAnonymousMode: (val: boolean) => void;
   getDayTasks: (date: string) => DailyTasks;
   getDayCompletion: (date: string) => number;
   getTodayPoints: () => number;
   getEffectivePoints: () => number;
+  supabaseUserId: string | null;
+  authReady: boolean;
+  profileRestoreCompleted: boolean;
+  syncToSupabase: () => Promise<void>;
+  refreshLeaderboardFromSupabase: () => Promise<void>;
+  resetAccount: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const TASKS_PER_DAY = 20;
@@ -143,8 +157,17 @@ function calculateDayPoints(tasks: DailyTasks): number {
   return points;
 }
 
+// TEMPORARY: set a date string like '2026-03-10' to simulate a different day, or null for real date
+// REMOVE before release!
+const DEBUG_DATE_OVERRIDE: string | null = null;
+
 function formatDate(d: Date): string {
-  return d.toISOString().split('T')[0];
+  return DEBUG_DATE_OVERRIDE || d.toISOString().split('T')[0];
+}
+
+/** Returns today's date string — respects DEBUG_DATE_OVERRIDE for testing */
+export function getToday(): string {
+  return formatDate(new Date());
 }
 
 const RAMADAN_START = new Date('2026-02-18');
@@ -165,14 +188,14 @@ function isLastTenNights(): boolean {
 }
 
 const SAMPLE_LEADERBOARD: LeaderboardEntry[] = [
-  { id: '1', username: 'AbuBakr', points: 4250, streak: 17, emoji: '🌙', isAnonymous: false },
-  { id: '2', username: 'FatimaZ', points: 3900, streak: 14, emoji: '⭐', isAnonymous: false },
-  { id: '3', username: 'UmarF', points: 3650, streak: 13, emoji: '🕌', isAnonymous: false },
-  { id: '4', username: 'Khadijah', points: 3400, streak: 12, emoji: '📿', isAnonymous: false },
-  { id: '5', username: 'AliIbn', points: 3100, streak: 11, emoji: '🤲', isAnonymous: false },
-  { id: '6', username: 'HassanM', points: 2800, streak: 10, emoji: '🌟', isAnonymous: false },
-  { id: '7', username: 'ZainabS', points: 2500, streak: 9, emoji: '💫', isAnonymous: false },
-  { id: '8', username: 'IbrahimA', points: 2200, streak: 7, emoji: '🌙', isAnonymous: false },
+  { id: '1', username: 'AbuBakr', points: 4250, streak: 17, emoji: '🌙' },
+  { id: '2', username: 'FatimaZ', points: 3900, streak: 14, emoji: '⭐' },
+  { id: '3', username: 'UmarF', points: 3650, streak: 13, emoji: '🕌' },
+  { id: '4', username: 'Khadijah', points: 3400, streak: 12, emoji: '📿' },
+  { id: '5', username: 'AliIbn', points: 3100, streak: 11, emoji: '🤲' },
+  { id: '6', username: 'HassanM', points: 2800, streak: 10, emoji: '🌟' },
+  { id: '7', username: 'ZainabS', points: 2500, streak: 9, emoji: '💫' },
+  { id: '8', username: 'IbrahimA', points: 2200, streak: 7, emoji: '🌙' },
 ];
 
 const BADGE_DEFS = [
@@ -205,9 +228,9 @@ const defaultState: AppState = {
   lastNights: {},
   reflections: {},
   niyyah: {},
-  leaderboard: SAMPLE_LEADERBOARD,
+  leaderboard: [],
   badges: Object.fromEntries(BADGE_DEFS.map(b => [b.id, { earned: false }])),
-  anonymousMode: false,
+  supabaseUserId: null,
   isLoaded: false,
 };
 
@@ -217,6 +240,96 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(defaultState);
+  const [authReady, setAuthReady] = useState(false);
+  const [profileRestoreCompleted, setProfileRestoreCompleted] = useState(false);
+
+  // Always-current ref to avoid stale closures in async sync functions
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Listen for Supabase auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setState(prev => ({ ...prev, supabaseUserId: session?.user?.id ?? null }));
+      setAuthReady(true);
+    });
+    // Also check current session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setState(prev => ({ ...prev, supabaseUserId: session?.user?.id ?? null }));
+      setAuthReady(true);
+    }).catch(() => {
+      // Network or config error — still mark auth as ready so routing can proceed
+      setAuthReady(true);
+    });
+    return () => { subscription.unsubscribe(); };
+  }, []);
+
+  // Restore profile + stats from Supabase when user logs in and local state is blank
+  useEffect(() => {
+    if (!state.supabaseUserId || !state.isLoaded) {
+      setProfileRestoreCompleted(false);
+      return;
+    }
+    if (state.profile.hasCompletedOnboarding) {
+      setProfileRestoreCompleted(true);
+      return;
+    }
+
+    const userId = state.supabaseUserId;
+    setProfileRestoreCompleted(false);
+    getUser(userId).then(user => {
+      if (user && user.username) {
+        console.log('🔄 Restoring from Supabase:', {
+          hasDaily: !!(user.daily_tasks && Object.keys(user.daily_tasks).length > 0),
+          hasQuran: !!(user.quran_progress && typeof (user.quran_progress as any).totalJuz === 'number'),
+          hasBadges: !!user.badges,
+          hasReflections: !!(user.reflections && Object.keys(user.reflections).length > 0),
+          hasNiyyah: !!(user.niyyah && Object.keys(user.niyyah).length > 0),
+          points: user.total_points,
+          streak: user.current_streak,
+        });
+        updateState(prev => ({
+          ...prev,
+          profile: {
+            ...prev.profile,
+            username: user.username,
+            emoji: user.emoji || '\ud83c\udf19',
+            city: user.city || '',
+            hasCompletedOnboarding: true,
+            sehriTime: prev.profile.sehriTime || '05:00',
+            iftarTime: prev.profile.iftarTime || '18:30',
+          },
+          totalPoints: Math.max(user.total_points ?? 0, prev.totalPoints),
+          streak: {
+            ...prev.streak,
+            current: Math.max(user.current_streak ?? 0, prev.streak.current),
+            best: Math.max(user.best_streak ?? 0, prev.streak.best),
+          },
+          // Restore full app state from Supabase — prevents progress loss on logout/login
+          // and prevents the exploit where resetting local state allows re-earning points
+          dailyTasks: (user.daily_tasks && Object.keys(user.daily_tasks).length > 0)
+            ? user.daily_tasks as Record<string, DailyTasks>
+            : prev.dailyTasks,
+          quranProgress: (user.quran_progress && typeof (user.quran_progress as any).totalJuz === 'number')
+            ? user.quran_progress as QuranProgress
+            : prev.quranProgress,
+          lastNights: (user.last_nights && Object.keys(user.last_nights).length > 0)
+            ? user.last_nights as LastNights
+            : prev.lastNights,
+          badges: user.badges
+            ? { ...prev.badges, ...(user.badges as Record<string, Badge>) }
+            : prev.badges,
+          reflections: (user.reflections && Object.keys(user.reflections).length > 0)
+            ? user.reflections as Record<string, Reflection>
+            : prev.reflections,
+          niyyah: (user.niyyah && Object.keys(user.niyyah).length > 0)
+            ? user.niyyah as Record<string, string>
+            : prev.niyyah,
+        }));
+      }
+    }).catch(e => console.error('Failed to restore profile from Supabase:', e))
+      .finally(() => setProfileRestoreCompleted(true));
+  }, [state.supabaseUserId, state.isLoaded]);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(raw => {
@@ -251,18 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [updateState]);
 
   const completeOnboarding = useCallback((profile: UserProfile) => {
-    updateState(prev => {
-      const myEntry: LeaderboardEntry = {
-        id: 'me',
-        username: profile.username,
-        points: prev.totalPoints,
-        streak: prev.streak.current,
-        emoji: profile.emoji,
-        isAnonymous: false,
-      };
-      const existing = prev.leaderboard.filter(e => e.id !== 'me');
-      return { ...prev, profile, leaderboard: [...existing, myEntry] };
-    });
+    updateState(prev => ({ ...prev, profile }));
   }, [updateState]);
 
   const getDayTasks = useCallback((date: string): DailyTasks => {
@@ -349,7 +451,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       streak.freezesAvailable = freezesEarned;
 
       const leaderboard = prev.leaderboard.map(e =>
-        e.id === 'me' ? { ...e, points: newTotalPoints, streak: streak.current } : e
+        (prev.supabaseUserId && e.id === prev.supabaseUserId) ? { ...e, points: newTotalPoints, streak: streak.current } : e
       );
 
       const nextState = checkAndUpdateBadges({
@@ -365,19 +467,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [updateState, checkAndUpdateBadges]);
 
   const setNiyyah = useCallback((date: string, niyyah: string) => {
-    updateState(prev => ({ ...prev, niyyah: { ...prev.niyyah, [date]: niyyah } }));
+    const safe = niyyah.slice(0, 200);
+    updateState(prev => ({ ...prev, niyyah: { ...prev.niyyah, [date]: safe } }));
   }, [updateState]);
 
   const addQuranJuz = useCallback((date: string, juz: number) => {
+    // Hard limits: max 5 juz per single log entry, max 5 juz per day total to prevent abuse
+    const clamped = Math.min(Math.max(0, juz), 5);
     updateState(prev => {
       const prevJuz = prev.quranProgress.dailyJuz[date] || 0;
-      const diff = juz - prevJuz;
+      const newDayTotal = Math.min(prevJuz + clamped, 5); // cap at 5 juz per day
+      const diff = newDayTotal - prevJuz;
+      if (diff <= 0) return prev; // nothing changed (daily cap reached)
       const totalJuz = Math.max(0, Math.min(30, prev.quranProgress.totalJuz + diff));
       const nextState = {
         ...prev,
         quranProgress: {
           totalJuz,
-          dailyJuz: { ...prev.quranProgress.dailyJuz, [date]: juz },
+          dailyJuz: { ...prev.quranProgress.dailyJuz, [date]: newDayTotal },
         },
       };
       return checkAndUpdateBadges(nextState);
@@ -385,7 +492,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [updateState, checkAndUpdateBadges]);
 
   const saveReflection = useCallback((date: string, note: string, mood: Mood | null) => {
-    updateState(prev => ({ ...prev, reflections: { ...prev.reflections, [date]: { note, mood } } }));
+    const safe = note.slice(0, 200);
+    updateState(prev => ({ ...prev, reflections: { ...prev.reflections, [date]: { note: safe, mood } } }));
   }, [updateState]);
 
   const toggleLastNightTask = useCallback((night: number, task: string) => {
@@ -408,11 +516,167 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [updateState]);
 
   const setAnonymousMode = useCallback((val: boolean) => {
-    updateState(prev => ({ ...prev, anonymousMode: val }));
-  }, [updateState]);
+    // no-op: anonymous mode removed
+  }, []);
+
+  // Supabase sync — reads from stateRef so it always has the latest data,
+  // regardless of when the async call actually executes.
+  const syncToSupabase = useCallback(async () => {
+    const s = stateRef.current;
+    if (!s.profile.hasCompletedOnboarding || !s.supabaseUserId) return;
+
+    try {
+      const userId = s.supabaseUserId;
+
+      // Upsert user profile row (keyed to auth uid)
+      await upsertUserProfile(userId, {
+        username: s.profile.username,
+        emoji: s.profile.emoji,
+        city: s.profile.city,
+      });
+
+      // Update user stats + full app state (tasks, quran progress, badges, etc.)
+      const result = await updateUserStats(userId, {
+        totalPoints: s.totalPoints,
+        currentStreak: s.streak.current,
+        bestStreak: s.streak.best,
+        dailyTasks: s.dailyTasks,
+        quranProgress: s.quranProgress,
+        lastNights: s.lastNights,
+        badges: s.badges,
+        reflections: s.reflections,
+        niyyah: s.niyyah,
+      });
+
+      if (!result) {
+        console.error('❌ updateUserStats returned null — JSONB columns may be missing. Run the ALTER TABLE migration.');
+      }
+
+      // Sync today's stats
+      const today = formatDate(new Date());
+      const tasks = s.dailyTasks[today];
+      if (tasks) {
+        const tasksCompleted = countTasksDone(tasks);
+        const pointsEarned = calculateDayPoints(tasks);
+        await syncDailyStats(userId, today, pointsEarned, tasksCompleted, TASKS_PER_DAY);
+      }
+
+      console.log('✅ Synced to Supabase');
+    } catch (error) {
+      console.error('❌ Error syncing to Supabase:', error);
+    }
+  }, []);
+
+  const refreshLeaderboardFromSupabase = useCallback(async () => {
+    try {
+      const users = await fetchLeaderboard(100);
+      
+      if (users.length > 0) {
+        const leaderboardEntries: LeaderboardEntry[] = users.map(user => ({
+          id: user.id,
+          username: user.username,
+          points: user.total_points,
+          streak: user.current_streak,
+          emoji: user.emoji,
+        }));
+
+        // Add current user if not in list
+        const userId = state.supabaseUserId;
+        const userInList = userId && leaderboardEntries.some(e => e.id === userId);
+        
+        if (!userInList && state.profile.hasCompletedOnboarding) {
+          leaderboardEntries.push({
+            id: userId || 'me',
+            username: state.profile.username,
+            points: state.totalPoints,
+            streak: state.streak.current,
+            emoji: state.profile.emoji,
+          });
+        }
+
+        // Sort by points
+        leaderboardEntries.sort((a, b) => b.points - a.points || b.streak - a.streak);
+
+        updateState(prev => ({ ...prev, leaderboard: leaderboardEntries }));
+        console.log('✅ Leaderboard refreshed from Supabase');
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing leaderboard:', error);
+    }
+  }, [state.profile, state.totalPoints, state.streak, updateState]);
+
+  // Auto-sync to Supabase when any tracked state changes (with debounce)
+  // syncToSupabase reads from stateRef so it always has the latest data.
+  useEffect(() => {
+    if (!state.isLoaded || !state.profile.hasCompletedOnboarding) return;
+
+    const timer = setTimeout(async () => {
+      await syncToSupabase();
+      refreshLeaderboardFromSupabase();
+    }, 2000); // Debounce 2 seconds
+
+    return () => clearTimeout(timer);
+  }, [state.totalPoints, state.streak.current, state.quranProgress, state.dailyTasks, state.reflections, state.lastNights, state.niyyah, state.badges, state.isLoaded, state.profile.hasCompletedOnboarding, syncToSupabase, refreshLeaderboardFromSupabase]);
+
+  // Refresh leaderboard periodically
+  useEffect(() => {
+    if (!state.isLoaded || !state.profile.hasCompletedOnboarding) return;
+
+    // Refresh on mount
+    refreshLeaderboardFromSupabase();
+
+    // Refresh every 5 minutes
+    const interval = setInterval(refreshLeaderboardFromSupabase, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [state.isLoaded, state.profile.hasCompletedOnboarding]);
+
+  // Schedule daily streak reminder notification
+  useEffect(() => {
+    if (!state.isLoaded || !state.profile.hasCompletedOnboarding) return;
+
+    scheduleDailyStreakReminder(state.streak.current).catch(e =>
+      console.warn('Failed to schedule streak notification:', e)
+    );
+  }, [state.isLoaded, state.profile.hasCompletedOnboarding, state.streak.current]);
+
+  // TODO: Remove before release — fires a test notification 5s after app loads
+  useEffect(() => {
+    if (!state.isLoaded || !state.profile.hasCompletedOnboarding) return;
+
+    sendTestNotification().catch(e =>
+      console.warn('Test notification failed:', e)
+    );
+  }, [state.isLoaded, state.profile.hasCompletedOnboarding]);
+
+  const resetAccount = useCallback(async () => {
+    // Clear all app state
+    await AsyncStorage.removeItem(STORAGE_KEY);
+    // Reset to default state
+    setState({ ...defaultState, isLoaded: true });
+  }, []);
+
+  const logout = useCallback(async () => {
+    // Force a final sync before clearing state so nothing is lost
+    // syncToSupabase reads from stateRef, so it has current data
+    try {
+      await syncToSupabase();
+    } catch (e) {
+      console.error('Final sync before logout failed:', e);
+    }
+    try {
+      await signOut();
+    } catch (e) {
+      console.error('Sign out error:', e);
+    }
+    await AsyncStorage.removeItem(STORAGE_KEY);
+    setState({ ...defaultState, isLoaded: true, supabaseUserId: null });
+  }, [syncToSupabase]);
 
   const value = useMemo<AppContextValue>(() => ({
     ...state,
+    authReady,
+    profileRestoreCompleted,
     updateProfile,
     completeOnboarding,
     toggleTask,
@@ -420,12 +684,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addQuranJuz,
     saveReflection,
     toggleLastNightTask,
-    setAnonymousMode,
     getDayTasks,
     getDayCompletion,
     getTodayPoints,
     getEffectivePoints,
-  }), [state, updateProfile, completeOnboarding, toggleTask, setNiyyah, addQuranJuz, saveReflection, toggleLastNightTask, setAnonymousMode, getDayTasks, getDayCompletion, getTodayPoints, getEffectivePoints]);
+    syncToSupabase,
+    refreshLeaderboardFromSupabase,
+    resetAccount,
+    logout,
+  }), [state, authReady, profileRestoreCompleted, updateProfile, completeOnboarding, toggleTask, setNiyyah, addQuranJuz, saveReflection, toggleLastNightTask, getDayTasks, getDayCompletion, getTodayPoints, getEffectivePoints, syncToSupabase, refreshLeaderboardFromSupabase, resetAccount, logout]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

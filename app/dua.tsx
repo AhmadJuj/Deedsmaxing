@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
-import { useApp } from '@/contexts/AppContext';
+import { useApp, getToday } from '@/contexts/AppContext';
 
 const SEHRI_DUA = 'Wa bisawmi ghadinn nawaiytu min shahri Ramadan\n\n"I intend to fast tomorrow for Ramadan"';
 const IFTAR_DUA = 'Allahumma inni laka sumtu wa bika amantu wa alayka tawakkaltu wa ala rizqika aftartu\n\n"O Allah! I fasted for You and I believe in You and I rely upon You and I break my fast with Your sustenance"';
@@ -59,7 +59,7 @@ function useCountdown(targetTimeStr: string) {
 export default function DuaScreen() {
   const insets = useSafeAreaInsets();
   const { profile } = useApp();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getToday();
   const dayIndex = new Date(today).getDate() % HADITH_OF_DAY.length;
   const hadith = HADITH_OF_DAY[dayIndex];
 

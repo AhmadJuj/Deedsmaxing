@@ -19,20 +19,35 @@ import { AppProvider, useApp } from "@/contexts/AppContext";
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
-  const { profile, isLoaded } = useApp();
+  const { profile, isLoaded, supabaseUserId, authReady, profileRestoreCompleted } = useApp();
 
   useEffect(() => {
-    if (!isLoaded) return;
-    if (!profile.hasCompletedOnboarding) {
-      router.replace('/onboarding');
+    if (!isLoaded || !authReady) return;
+
+    if (!supabaseUserId) {
+      // Not logged in — show auth screen
+      router.replace('/auth');
+      return;
     }
-  }, [isLoaded, profile.hasCompletedOnboarding]);
+
+    // Wait for Supabase profile restore to finish before deciding
+    if (!profileRestoreCompleted) return;
+
+    if (!profile.hasCompletedOnboarding) {
+      // Logged in but genuinely new user
+      router.replace('/onboarding');
+    } else {
+      // Logged in and onboarded — go to main app
+      router.replace('/(tabs)');
+    }
+  }, [isLoaded, authReady, supabaseUserId, profile.hasCompletedOnboarding, profileRestoreCompleted]);
 
   return (
     <>
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0A1F14' } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="dua" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="nights" options={{ headerShown: false, presentation: 'modal' }} />

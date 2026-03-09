@@ -19,6 +19,8 @@
     },
     "android": {
       "package": "com.deedsmaxing",
+      "enableProguardInReleaseBuilds": true,
+      "enableShrinkResourcesInReleaseBuilds": true,
       "adaptiveIcon": {
         "backgroundColor": "#0A1F14",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,11 +39,25 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://replit.com/"
+      },
+      "eas": {
+        "projectId": "42e1775b-b1c0-4696-ab15-38e8b57045da"
+      }
     }
   }
 }

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Switch, Platform,
+  View, Text, StyleSheet, ScrollView, Pressable, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useApp, LeaderboardEntry } from '@/contexts/AppContext';
+import { supabase } from '@/lib/supabase';
 
 type RankBadge = { label: string; color: string; minPoints: number };
 
@@ -22,11 +23,11 @@ function getRank(points: number): RankBadge {
   return RANKS.find(r => points >= r.minPoints) || RANKS[3];
 }
 
-function LeaderRow({ entry, rank, isMe, isAnonymous }: {
-  entry: LeaderboardEntry; rank: number; isMe: boolean; isAnonymous: boolean;
+function LeaderRow({ entry, rank, isMe }: {
+  entry: LeaderboardEntry; rank: number; isMe: boolean;
 }) {
   const { label, color } = getRank(entry.points);
-  const displayName = (isMe && isAnonymous) ? 'Anonymous' : entry.username;
+  const displayName = entry.username;
 
   return (
     <View style={[styles.row, isMe && styles.rowMe]}>
@@ -64,14 +65,31 @@ function LeaderRow({ entry, rank, isMe, isAnonymous }: {
 
 export default function LeaderboardScreen() {
   const insets = useSafeAreaInsets();
-  const { leaderboard, profile, anonymousMode, setAnonymousMode, totalPoints, streak } = useApp();
-  const [tab, setTab] = useState<'global' | 'friends'>('global');
+  const { leaderboard, profile, totalPoints, streak, refreshLeaderboardFromSupabase, supabaseUserId } = useApp();
+
+  // Subscribe to real-time user changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('users-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'users' },
+        (payload) => {
+          console.log('User updated:', payload);
+          refreshLeaderboardFromSupabase();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshLeaderboardFromSupabase]);
 
   const sorted = [...leaderboard]
     .sort((a, b) => b.points - a.points)
     .map((e, i) => ({ ...e, rank: i + 1 }));
 
-  const myRank = sorted.find(e => e.id === 'me')?.rank ?? sorted.length + 1;
+  const myRank = (supabaseUserId ? sorted.find(e => e.id === supabaseUserId)?.rank : null) ?? sorted.length + 1;
   const { label: myRankLabel, color: myRankColor } = getRank(totalPoints);
 
   return (
@@ -79,16 +97,6 @@ export default function LeaderboardScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic">
         <View style={styles.header}>
           <Text style={styles.title}>Leaderboard</Text>
-          <View style={styles.anonRow}>
-            <Ionicons name="eye-off-outline" size={14} color={Colors.textSub} />
-            <Text style={styles.anonLabel}>Anonymous</Text>
-            <Switch
-              value={anonymousMode}
-              onValueChange={v => { Haptics.selectionAsync(); setAnonymousMode(v); }}
-              trackColor={{ false: Colors.card, true: Colors.goldDim }}
-              thumbColor={anonymousMode ? Colors.gold : Colors.textDim}
-            />
-          </View>
         </View>
 
         <LinearGradient
@@ -98,7 +106,7 @@ export default function LeaderboardScreen() {
         >
           <Text style={styles.myEmoji}>{profile.emoji}</Text>
           <View style={styles.myInfo}>
-            <Text style={styles.myName}>{anonymousMode ? 'Anonymous' : profile.username}</Text>
+          <Text style={styles.myName}>{profile.username}</Text>
             <Text style={styles.myCity}>{profile.city}</Text>
           </View>
           <View style={styles.myStats}>
@@ -125,42 +133,15 @@ export default function LeaderboardScreen() {
           </View>
         </LinearGradient>
 
-        <View style={styles.tabRow}>
-          {(['global', 'friends'] as const).map(t => (
-            <Pressable
-              key={t}
-              onPress={() => { setTab(t); Haptics.selectionAsync(); }}
-              style={[styles.tabBtn, tab === t && styles.tabBtnActive]}
-            >
-              <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                {t === 'global' ? 'Global' : 'Friends'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
         <View style={styles.listSection}>
-          {tab === 'friends' ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color={Colors.textDim} />
-              <Text style={styles.emptyTitle}>No friends yet</Text>
-              <Text style={styles.emptyText}>Share your invite code to compete with friends</Text>
-              <View style={styles.codeCard}>
-                <Text style={styles.codeLabel}>Your invite code</Text>
-                <Text style={styles.codeValue}>{profile.username?.toUpperCase().slice(0, 6) || 'RAM001'}</Text>
-              </View>
-            </View>
-          ) : (
-            sorted.map(entry => (
-              <LeaderRow
-                key={entry.id}
-                entry={entry}
-                rank={entry.rank}
-                isMe={entry.id === 'me'}
-                isAnonymous={anonymousMode}
-              />
-            ))
-          )}
+          {sorted.map(entry => (
+            <LeaderRow
+              key={entry.id}
+              entry={entry}
+              rank={entry.rank}
+              isMe={!!supabaseUserId && entry.id === supabaseUserId}
+            />
+          ))}
         </View>
 
         <View style={{ height: Platform.OS === 'web' ? 100 : 90 }} />
@@ -176,8 +157,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingBottom: 16, paddingTop: 8,
   },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', color: Colors.text },
-  anonRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  anonLabel: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.textSub },
   myCard: {
     marginHorizontal: 20, marginBottom: 16, borderRadius: 20, padding: 20,
     borderWidth: 1, borderColor: Colors.cardBorder, alignItems: 'center', gap: 12,
@@ -196,15 +175,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6,
   },
   rankChipText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
-  tabRow: {
-    flexDirection: 'row', marginHorizontal: 20, marginBottom: 12,
-    backgroundColor: Colors.card, borderRadius: 12, padding: 4,
-    borderWidth: 1, borderColor: Colors.cardBorder,
-  },
-  tabBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10 },
-  tabBtnActive: { backgroundColor: Colors.gold },
-  tabText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.textSub },
-  tabTextActive: { color: '#0A1F14' },
   listSection: { marginHorizontal: 20, gap: 2 },
   row: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 14,

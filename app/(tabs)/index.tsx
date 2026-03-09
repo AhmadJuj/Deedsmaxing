@@ -9,7 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
-import { useApp, getHijriDate, getRamadanDay, DailyTasks } from '@/contexts/AppContext';
+import { useApp, getHijriDate, getRamadanDay, getToday, DailyTasks } from '@/contexts/AppContext';
 
 type Category = keyof DailyTasks;
 
@@ -88,7 +88,7 @@ export default function HomeScreen() {
   const [activeCategory, setActiveCategory] = useState<Category>('salah');
   const [editingNiyyah, setEditingNiyyah] = useState(false);
   const [niyyahInput, setNiyyahInput] = useState('');
-  const today = new Date().toISOString().split('T')[0];
+  const today = getToday();
   const tasks = getDayTasks(today);
   const completion = getDayCompletion(today);
   const todayPoints = getTodayPoints();
