@@ -9,17 +9,26 @@ import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useApp, getToday } from '@/contexts/AppContext';
 
-const SEHRI_DUA = 'Wa bisawmi ghadinn nawaiytu min shahri Ramadan\n\n"I intend to fast tomorrow for Ramadan"';
-const IFTAR_DUA = 'Allahumma inni laka sumtu wa bika amantu wa alayka tawakkaltu wa ala rizqika aftartu\n\n"O Allah! I fasted for You and I believe in You and I rely upon You and I break my fast with Your sustenance"';
+const IFTAR_DUA = {
+  urdu: 'ذَهَبَ الظَّمَأُ وَابْتَلَّتِ الْعُرُوقُ وَثَبَتَ الْأَجْرُ إِنْ شَاءَ اللَّهُ\n\nپیاس بجھ گئی، رگیں تر ہو گئیں اور اللہ نے چاہا تو اجر بھی ثابت ہو گیا۔\n\n(ابو داؤد ٢٣٥٧)',
+  english: 'ذَهَبَ الظَّمَأُ وَابْتَلَّتِ الْعُرُوقُ وَثَبَتَ الْأَجْرُ إِنْ شَاءَ اللَّهُ\n\nThe thirst has gone, the veins are moistened, and the reward is confirmed, if Allah wills.\n\n(Abu Dawood 2357)',
+};
+
+const LYING_HADITH = {
+  arabic: 'إِيَّاكُمْ وَالْكَذِبَ فَإِنَّ الْكَذِبَ يَهْدِي إِلَى الْفُجُورِ وَإِنَّ الْفُجُورَ يَهْدِي إِلَى النَّارِ وَمَا يَزَالُ الرَّجُلُ يَكْذِبُ وَيَتَحَرَّى الْكَذِبَ حَتَّى يُكْتَبَ عِنْدَ اللَّهِ كَذَّابًا',
+  urdu: 'جھوٹ سے بچو کیونکہ جھوٹ گناہ کی طرف لے جاتا ہے اور گناہ جہنم کی طرف لے جاتا ہے۔ آدمی جھوٹ بولتا رہتا ہے اور جھوٹ کی تلاش کرتا رہتا ہے یہاں تک کہ اللہ کے ہاں اسے کذّاب (بڑا جھوٹا) لکھ دیا جاتا ہے۔',
+  english: 'Beware of lying, for lying leads to wickedness and wickedness leads to the Hellfire. A man continues to lie and seeks out lies until he is written with Allah as a liar.',
+  source: { urdu: 'صحیح مسلم ٢٦٠٧', english: 'Sahih Muslim 2607' },
+};
 
 const HADITH_OF_DAY = [
-  { text: 'Whoever does not give up false statements and evil deeds while fasting, Allah does not need his leaving food and drink.', source: 'Bukhari' },
-  { text: 'There is a gate in Paradise called Ar-Raiyan, and those who observe fasts will enter through it.', source: 'Bukhari' },
-  { text: 'When Ramadan begins, the gates of Paradise are opened.', source: 'Bukhari & Muslim' },
-  { text: 'The best charity is that given in Ramadan.', source: 'Tirmidhi' },
-  { text: 'Ramadan has come to you. (It is) a month of blessing, in which Allah covers you with blessing.', source: 'Ahmad' },
-  { text: 'Every action of the son of Adam is given manifold reward, each good deed receiving ten times its like, up to seven hundred times.', source: 'Muslim' },
-  { text: 'He who prays during the night in Ramadan with faith and seeking his reward from Allah will have his past sins forgiven.', source: 'Bukhari & Muslim' },
+  { urdu: 'جو شخص جھوٹی باتیں اور برے کام روزے میں نہیں چھوڑتا، اللہ کو اس کے کھانا پینا چھوڑنے کی کوئی ضرورت نہیں۔', english: 'Whoever does not give up false statements and evil deeds while fasting, Allah does not need his leaving food and drink.', source: { urdu: 'بخاری', english: 'Bukhari' } },
+  { urdu: 'جنت میں ایک دروازہ ہے جسے الریّان کہتے ہیں، اس سے صرف روزہ دار داخل ہوں گے۔', english: 'There is a gate in Paradise called Ar-Raiyan, and those who observe fasts will enter through it.', source: { urdu: 'بخاری', english: 'Bukhari' } },
+  { urdu: 'جب رمضان آتا ہے تو جنت کے دروازے کھول دیے جاتے ہیں۔', english: 'When Ramadan begins, the gates of Paradise are opened.', source: { urdu: 'بخاری و مسلم', english: 'Bukhari & Muslim' } },
+  { urdu: 'سب سے بہترین صدقہ وہ ہے جو رمضان میں دیا جائے۔', english: 'The best charity is that given in Ramadan.', source: { urdu: 'ترمذی', english: 'Tirmidhi' } },
+  { urdu: 'تمہارے پاس رمضان کا مہینہ آیا ہے، یہ برکت کا مہینہ ہے جس میں اللہ تمہیں اپنی رحمت سے ڈھانپ لیتا ہے۔', english: 'Ramadan has come to you. It is a month of blessing, in which Allah covers you with blessing.', source: { urdu: 'احمد', english: 'Ahmad' } },
+  { urdu: 'ابنِ آدم کا ہر عمل بڑھا کر دیا جاتا ہے، ایک نیکی دس گنا سے سات سو گنا تک بڑھائی جاتی ہے۔', english: 'Every action of the son of Adam is given manifold reward, each good deed receiving ten times its like, up to seven hundred times.', source: { urdu: 'مسلم', english: 'Muslim' } },
+  { urdu: 'جو رمضان میں ایمان اور ثواب کی نیت سے رات کو عبادت کرے، اس کے پچھلے گناہ معاف کر دیے جاتے ہیں۔', english: 'He who prays during the night in Ramadan with faith and seeking his reward from Allah will have his past sins forgiven.', source: { urdu: 'بخاری و مسلم', english: 'Bukhari & Muslim' } },
 ];
 
 function getTimeMs(timeStr: string): number {
@@ -59,6 +68,7 @@ function useCountdown(targetTimeStr: string) {
 export default function DuaScreen() {
   const insets = useSafeAreaInsets();
   const { profile } = useApp();
+  const [lang, setLang] = useState<'urdu' | 'english'>('urdu');
   const today = getToday();
   const dayIndex = new Date(today).getDate() % HADITH_OF_DAY.length;
   const hadith = HADITH_OF_DAY[dayIndex];
@@ -70,9 +80,18 @@ export default function DuaScreen() {
     <View style={[styles.container, { paddingBottom: insets.bottom + (Platform.OS === 'web' ? 34 : 0) }]}>
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <Text style={styles.topTitle}>Timings & Duas</Text>
-        <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color={Colors.text} />
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Pressable
+            onPress={() => setLang(l => l === 'urdu' ? 'english' : 'urdu')}
+            style={styles.langToggle}
+          >
+            <Ionicons name="language" size={16} color={Colors.gold} />
+            <Text style={styles.langToggleText}>{lang === 'urdu' ? 'EN' : 'اردو'}</Text>
+          </Pressable>
+          <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+            <Ionicons name="close" size={22} color={Colors.text} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -100,37 +119,41 @@ export default function DuaScreen() {
         </View>
 
         <View style={styles.duaSection}>
-          <Text style={styles.sectionTitle}>Sehri Dua</Text>
-          <View style={styles.duaCard}>
-            <View style={styles.duaIconRow}>
-              <Ionicons name="moon" size={18} color="#70B8E0" />
-              <Text style={styles.duaTitle}>Before Sehri</Text>
-            </View>
-            <Text style={styles.duaText}>{SEHRI_DUA}</Text>
-          </View>
-        </View>
-
-        <View style={styles.duaSection}>
-          <Text style={styles.sectionTitle}>Iftar Dua</Text>
-          <View style={styles.duaCard}>
-            <View style={styles.duaIconRow}>
-              <Ionicons name="sunny" size={18} color={Colors.gold} />
-              <Text style={styles.duaTitle}>When Breaking Fast</Text>
-            </View>
-            <Text style={styles.duaText}>{IFTAR_DUA}</Text>
-          </View>
-        </View>
-
-        <View style={styles.hadithSection}>
-          <Text style={styles.sectionTitle}>Hadith of the Day</Text>
+          <Text style={styles.sectionTitle}>{lang === 'urdu' ? 'جھوٹ کے بارے میں حدیث' : 'Hadith on Lying'}</Text>
           <View style={styles.hadithCard}>
             <View style={styles.quoteMark}>
               <Text style={styles.quoteChar}>"</Text>
             </View>
-            <Text style={styles.hadithText}>{hadith.text}</Text>
+            <Text style={styles.hadithText}>{LYING_HADITH.arabic}</Text>
+            <Text style={[styles.duaText, { marginTop: 12 }]}>{lang === 'urdu' ? LYING_HADITH.urdu : LYING_HADITH.english}</Text>
             <View style={styles.hadithSource}>
               <View style={styles.hadithSourceLine} />
-              <Text style={styles.hadithSourceText}>{hadith.source}</Text>
+              <Text style={styles.hadithSourceText}>{lang === 'urdu' ? LYING_HADITH.source.urdu : LYING_HADITH.source.english}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.duaSection}>
+          <Text style={styles.sectionTitle}>{lang === 'urdu' ? 'افطار کی دعا' : 'Iftar Dua'}</Text>
+          <View style={styles.duaCard}>
+            <View style={styles.duaIconRow}>
+              <Ionicons name="sunny" size={18} color={Colors.gold} />
+              <Text style={styles.duaTitle}>{lang === 'urdu' ? 'افطار کے وقت' : 'When Breaking Fast'}</Text>
+            </View>
+            <Text style={styles.duaText}>{IFTAR_DUA[lang]}</Text>
+          </View>
+        </View>
+
+        <View style={styles.hadithSection}>
+          <Text style={styles.sectionTitle}>{lang === 'urdu' ? 'آج کی حدیث' : 'Hadith of the Day'}</Text>
+          <View style={styles.hadithCard}>
+            <View style={styles.quoteMark}>
+              <Text style={styles.quoteChar}>"</Text>
+            </View>
+            <Text style={styles.hadithText}>{hadith[lang]}</Text>
+            <View style={styles.hadithSource}>
+              <View style={styles.hadithSourceLine} />
+              <Text style={styles.hadithSourceText}>{hadith.source[lang]}</Text>
             </View>
           </View>
         </View>
@@ -152,6 +175,12 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center',
   },
+  langToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.card, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: Colors.gold + '40',
+  },
+  langToggleText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.gold },
   timersRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 12, marginBottom: 24 },
   timerCard: {
     flex: 1, borderRadius: 20, padding: 20, alignItems: 'center', gap: 6,

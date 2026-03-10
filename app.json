@@ -4,12 +4,12 @@
     "slug": "deedsmaxing",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/chad2.png",
     "scheme": "deedsmaxing",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/chad1.png",
       "resizeMode": "contain",
       "backgroundColor": "#0A1F14"
     },
@@ -23,9 +23,7 @@
       "enableShrinkResourcesInReleaseBuilds": true,
       "adaptiveIcon": {
         "backgroundColor": "#0A1F14",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/chad2.png"
       }
     },
     "web": {
@@ -56,8 +54,11 @@
         "origin": "https://replit.com/"
       },
       "eas": {
-        "projectId": "42e1775b-b1c0-4696-ab15-38e8b57045da"
-      }
+        "projectId": "f5a0416b-a6fb-4f4f-9698-0c79db5b4293"
+      },
+      "supabaseUrl": "https://obwrwabxuxdhpyfpmcao.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9id3J3YWJ4dXhkaHB5ZnBtY2FvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjkwNDI1NSwiZXhwIjoyMDg4NDgwMjU1fQ.tVtZ7G2Nyq8CYhttnh5lUBEOhCotZGDzs3oIQxUOu4I",
+      "googleWebClientId": "738334648353-esaa9ma7p7eng61rfpvocvtl0kcvm792.apps.googleusercontent.com"
     }
   }
 }

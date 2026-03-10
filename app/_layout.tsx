@@ -12,6 +12,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { StatusBar } from "expo-status-bar";
+import { View, Image, StyleSheet } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AppProvider, useApp } from "@/contexts/AppContext";
@@ -20,27 +21,35 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { profile, isLoaded, supabaseUserId, authReady, profileRestoreCompleted } = useApp();
+  const [splashVisible, setSplashVisible] = React.useState(true);
+  const [appReady, setAppReady] = React.useState(false);
+
+  // Enforce a minimum 2-second splash screen
+  useEffect(() => {
+    const timer = setTimeout(() => setAppReady(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
-    if (!isLoaded || !authReady) return;
+    if (!appReady || !isLoaded || !authReady) return;
 
     if (!supabaseUserId) {
-      // Not logged in — show auth screen
       router.replace('/auth');
+      setSplashVisible(false);
+      SplashScreen.hideAsync();
       return;
     }
 
-    // Wait for Supabase profile restore to finish before deciding
     if (!profileRestoreCompleted) return;
 
     if (!profile.hasCompletedOnboarding) {
-      // Logged in but genuinely new user
       router.replace('/onboarding');
     } else {
-      // Logged in and onboarded — go to main app
       router.replace('/(tabs)');
     }
-  }, [isLoaded, authReady, supabaseUserId, profile.hasCompletedOnboarding, profileRestoreCompleted]);
+    setSplashVisible(false);
+    SplashScreen.hideAsync();
+  }, [appReady, isLoaded, authReady, supabaseUserId, profile.hasCompletedOnboarding, profileRestoreCompleted]);
 
   return (
     <>
@@ -53,9 +62,32 @@ function RootLayoutNav() {
         <Stack.Screen name="nights" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="badges" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>
+      {splashVisible && (
+        <View style={splashStyles.overlay}>
+          <Image
+            source={require('@/assets/images/chad1.png')}
+            style={splashStyles.image}
+            resizeMode="contain"
+          />
+        </View>
+      )}
     </>
   );
 }
+
+const splashStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0A1F14',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  image: {
+    width: '80%',
+    height: '80%',
+  },
+});
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -65,11 +97,14 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  // Splash is hidden in RootLayoutNav once auth + routing is ready.
+  // Fonts must load first before we render anything.
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    if (fontError) {
+      // Hide splash on font error so the app isn't stuck
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontError]);
 
   if (!fontsLoaded && !fontError) return null;
 

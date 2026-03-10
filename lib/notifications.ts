@@ -98,24 +98,3 @@ export async function scheduleDailyStreakReminder(
 export async function cancelStreakReminders(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
-
-// TODO: Remove before release — test notification that fires in 5 seconds
-export async function sendTestNotification(): Promise<void> {
-  const granted = await requestNotificationPermissions();
-  if (!granted) return;
-
-  await ensureChannel();
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: '🔥 Streak Reminder Test',
-      body: 'If you see this, notifications are working! Keep your streak alive!',
-      sound: 'default',
-      ...(Platform.OS === 'android' && { channelId: STREAK_CHANNEL_ID }),
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: 5,
-    },
-  });
-}

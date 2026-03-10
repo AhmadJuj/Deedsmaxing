@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 
 // Get Supabase credentials from environment variables
@@ -24,6 +27,9 @@ export const supabase = createClient(
     },
   }
 );
+
+// Required for Supabase OAuth to work properly on mobile
+WebBrowser.maybeCompleteAuthSession();
 
 // --- Auth helpers ---
 
@@ -52,6 +58,86 @@ export async function getCurrentUser() {
 export async function getCurrentSession() {
   const { data: { session } } = await supabase.auth.getSession();
   return session;
+}
+
+export async function signInWithGoogle() {
+  try {
+    // Use Linking.createURL which works correctly in both Expo Go and standalone builds
+    // Expo Go: exp://192.168.x.x:8081/--/auth/callback
+    // Standalone: deedsmaxing://auth/callback
+    const redirectUrl = Linking.createURL('auth/callback');
+
+    console.log('🔑 Redirect URL:', redirectUrl);
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: false,
+      },
+    });
+
+    if (error) {
+      console.error('❌ OAuth error:', error);
+      throw error;
+    }
+    
+    if (!data?.url) {
+      throw new Error('No OAuth URL returned from Supabase');
+    }
+
+    console.log('🌐 Opening OAuth browser...');
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    
+    console.log('📱 Browser result:', result.type);
+
+    if (result.type === 'success' && result.url) {
+      console.log('✅ OAuth callback received');
+      
+      // Parse tokens from callback URL (format: deedsmaxing://auth/callback#access_token=xxx&refresh_token=yyy)
+      const url = new URL(result.url);
+      
+      // Tokens can be in hash or search params depending on OAuth flow
+      const hashParams = new URLSearchParams(url.hash.substring(1));
+      const searchParams = new URLSearchParams(url.search);
+      
+      const access_token = hashParams.get('access_token') || searchParams.get('access_token');
+      const refresh_token = hashParams.get('refresh_token') || searchParams.get('refresh_token');
+      
+      if (access_token && refresh_token) {
+        console.log('🔐 Setting session with tokens');
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        });
+        
+        if (sessionError) {
+          console.error('❌ Session error:', sessionError);
+          throw sessionError;
+        }
+        
+        console.log('✅ Google Sign-In successful');
+      } else {
+        console.warn('⚠️ No tokens found in callback URL');
+        // Session might already be set by Supabase client
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session) {
+          throw new Error('Authentication completed but no session found');
+        }
+      }
+    } else if (result.type === 'cancel') {
+      console.log('❌ User cancelled OAuth');
+      throw new Error('Google Sign-In cancelled');
+    } else {
+      console.log('❌ OAuth failed:', result.type);
+      throw new Error('Google Sign-In failed');
+    }
+    
+    return data;
+  } catch (err) {
+    console.error('❌ signInWithGoogle error:', err);
+    throw err;
+  }
 }
 
 // Database types

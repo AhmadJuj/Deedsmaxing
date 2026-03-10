@@ -8,11 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
-import { signUp, signIn } from '@/lib/supabase';
+import { signUp, signIn, signInWithGoogle } from '@/lib/supabase';
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
-  const [mode, setMode] = useState<'login' | 'signup'>('signup');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,6 +45,19 @@ export default function AuthScreen() {
       } else {
         setErrorMsg(msg || 'Something went wrong. Please try again.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      await signInWithGoogle();
+    } catch (error: any) {
+      const msg: string = error?.message || '';
+      setErrorMsg(msg || 'Google sign-in failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -140,6 +153,26 @@ export default function AuthScreen() {
               )}
             </LinearGradient>
           </Pressable>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Pressable
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+            style={({ pressed }) => [
+              styles.googleBtn,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+            ]}
+          >
+            <View style={styles.googleBtnInner}>
+              <Ionicons name="logo-google" size={20} color="#EA4335" />
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </View>
+          </Pressable>
         </View>
 
         <Pressable
@@ -194,6 +227,19 @@ const styles = StyleSheet.create({
     paddingVertical: 16, borderRadius: 16,
   },
   submitText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: '#0A1F14' },
+  divider: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 8,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.cardBorder },
+  dividerText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: Colors.textDim },
+  googleBtn: {
+    backgroundColor: Colors.card, borderRadius: 16, borderWidth: 1, borderColor: Colors.cardBorder,
+  },
+  googleBtnInner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    paddingVertical: 16,
+  },
+  googleBtnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: Colors.text },
   switchRow: {
     flexDirection: 'row', justifyContent: 'center', marginTop: 24,
   },

@@ -8,7 +8,7 @@ import {
   syncDailyStats,
   getUser,
 } from '@/lib/supabase-service';
-import { scheduleDailyStreakReminder, sendTestNotification } from '@/lib/notifications';
+import { scheduleDailyStreakReminder } from '@/lib/notifications';
 
 export type Mood = 'peaceful' | 'struggling' | 'motivated' | 'grateful';
 
@@ -264,14 +264,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { subscription.unsubscribe(); };
   }, []);
 
-  // Restore profile + stats from Supabase when user logs in and local state is blank
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then(raw => {
+      if (raw) {
+        try {
+          const saved = JSON.parse(raw);
+          setState(prev => ({ ...prev, ...saved, isLoaded: true }));
+        } catch {
+          setState(prev => ({ ...prev, isLoaded: true }));
+        }
+      } else {
+        setState(prev => ({ ...prev, isLoaded: true }));
+      }
+    });
+  }, []);
+
+  const persist = useCallback((newState: AppState) => {
+    const { isLoaded, ...toSave } = newState;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  }, []);
+
+  const updateState = useCallback((updater: (prev: AppState) => AppState) => {
+    setState(prev => {
+      const next = updater(prev);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  // Restore profile + stats from Supabase when user logs in
+  // IMPORTANT: Always check Supabase DB even if local state says onboarding is complete
+  // to handle OAuth users who may have stale local data from a different account
   useEffect(() => {
     if (!state.supabaseUserId || !state.isLoaded) {
       setProfileRestoreCompleted(false);
-      return;
-    }
-    if (state.profile.hasCompletedOnboarding) {
-      setProfileRestoreCompleted(true);
       return;
     }
 
@@ -326,38 +352,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? user.niyyah as Record<string, string>
             : prev.niyyah,
         }));
+      } else {
+        // User doesn't exist in DB yet (new OAuth user)
+        // Reset local state to force onboarding even if there's stale AsyncStorage data
+        console.log('🆕 New user detected - resetting to onboarding');
+        updateState(prev => ({
+          ...defaultState,
+          supabaseUserId: userId,
+          isLoaded: true,
+          profile: {
+            ...defaultState.profile,
+            hasCompletedOnboarding: false,
+          },
+        }));
       }
     }).catch(e => console.error('Failed to restore profile from Supabase:', e))
       .finally(() => setProfileRestoreCompleted(true));
-  }, [state.supabaseUserId, state.isLoaded]);
-
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(raw => {
-      if (raw) {
-        try {
-          const saved = JSON.parse(raw);
-          setState(prev => ({ ...prev, ...saved, isLoaded: true }));
-        } catch {
-          setState(prev => ({ ...prev, isLoaded: true }));
-        }
-      } else {
-        setState(prev => ({ ...prev, isLoaded: true }));
-      }
-    });
-  }, []);
-
-  const persist = useCallback((newState: AppState) => {
-    const { isLoaded, ...toSave } = newState;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-  }, []);
-
-  const updateState = useCallback((updater: (prev: AppState) => AppState) => {
-    setState(prev => {
-      const next = updater(prev);
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+  }, [state.supabaseUserId, state.isLoaded, updateState]);
 
   const updateProfile = useCallback((profile: Partial<UserProfile>) => {
     updateState(prev => ({ ...prev, profile: { ...prev.profile, ...profile } }));
@@ -639,15 +650,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.warn('Failed to schedule streak notification:', e)
     );
   }, [state.isLoaded, state.profile.hasCompletedOnboarding, state.streak.current]);
-
-  // TODO: Remove before release — fires a test notification 5s after app loads
-  useEffect(() => {
-    if (!state.isLoaded || !state.profile.hasCompletedOnboarding) return;
-
-    sendTestNotification().catch(e =>
-      console.warn('Test notification failed:', e)
-    );
-  }, [state.isLoaded, state.profile.hasCompletedOnboarding]);
 
   const resetAccount = useCallback(async () => {
     // Clear all app state
