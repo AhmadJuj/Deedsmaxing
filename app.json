@@ -56,9 +56,9 @@
       "eas": {
         "projectId": "f5a0416b-a6fb-4f4f-9698-0c79db5b4293"
       },
-      "supabaseUrl": "https://obwrwabxuxdhpyfpmcao.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9id3J3YWJ4dXhkaHB5ZnBtY2FvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjkwNDI1NSwiZXhwIjoyMDg4NDgwMjU1fQ.tVtZ7G2Nyq8CYhttnh5lUBEOhCotZGDzs3oIQxUOu4I",
-      "googleWebClientId": "738334648353-esaa9ma7p7eng61rfpvocvtl0kcvm792.apps.googleusercontent.com"
+      "supabaseUrl": "supabase-url",
+      "supabaseAnonKey": "supabase-anon-key",
+      "googleWebClientId": "google-client-id"
     }
   }
 }
