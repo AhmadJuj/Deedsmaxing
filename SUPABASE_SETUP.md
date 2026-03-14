@@ -1,129 +1,167 @@
 # DeedsMaxing Supabase Setup
 
-## 📋 Prerequisites
+This file contains everything needed to set up Supabase for this app.
 
-- A Supabase project at [supabase.com](https://supabase.com)
-- **Email Auth** enabled (it's on by default)
-
-## 📋 Database Schema
-
-Run this SQL in your Supabase SQL Editor:
+## 1. Run This SQL In Supabase SQL Editor
 
 ```sql
--- Enable UUID npx expo start --clear
+-- Extensions
+create extension if not exists pgcrypto;
+
+-- USERS TABLE
+create table if not exists public.users (
+  id uuid primary key references auth.users(id) on delete cascade,
+  username text not null,
+  emoji text not null default '🌙',
+  city text not null default '',
+  total_points integer not null default 0,
+  current_streak integer not null default 0,
+  best_streak integer not null default 0,
+  daily_tasks jsonb,
+  quran_progress jsonb,
+  last_nights jsonb,
+  badges jsonb,
+  reflections jsonb,
+  niyyah jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- DAILY STATS TABLE
+create table if not exists public.daily_stats (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  date date not null,
+  points_earned integer not null default 0,
+  tasks_completed integer not null default 0,
+  total_tasks integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (user_id, date)
+);
+
+-- INDEXES
+create index if not exists users_total_points_idx on public.users (total_points desc);
+create index if not exists users_city_idx on public.users (city);
+create index if not exists daily_stats_user_date_idx on public.daily_stats (user_id, date);
+
+-- updated_at TRIGGER
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_users_updated_at on public.users;
+create trigger trg_users_updated_at
+before update on public.users
+for each row
+execute function public.set_updated_at();
+
+-- RLS
+alter table public.users enable row level security;
+alter table public.daily_stats enable row level security;
+
+-- USERS POLICIES
+drop policy if exists "users_select_all" on public.users;
+create policy "users_select_all"
+on public.users
+for select
+using (true);
+
+drop policy if exists "users_insert_own" on public.users;
+create policy "users_insert_own"
+on public.users
+for insert
+to authenticated
+with check (auth.uid() = id);
+
+drop policy if exists "users_update_own" on public.users;
+create policy "users_update_own"
+on public.users
+for update
+to authenticated
+using (auth.uid() = id)
+with check (auth.uid() = id);
+
+drop policy if exists "users_delete_own" on public.users;
+create policy "users_delete_own"
+on public.users
+for delete
+to authenticated
+using (auth.uid() = id);
+
+-- DAILY_STATS POLICIES
+drop policy if exists "daily_stats_select_own" on public.daily_stats;
+create policy "daily_stats_select_own"
+on public.daily_stats
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "daily_stats_insert_own" on public.daily_stats;
+create policy "daily_stats_insert_own"
+on public.daily_stats
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "daily_stats_update_own" on public.daily_stats;
+create policy "daily_stats_update_own"
+on public.daily_stats
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "daily_stats_delete_own" on public.daily_stats;
+create policy "daily_stats_delete_own"
+on public.daily_stats
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+-- REALTIME (leaderboard updates)
+alter publication supabase_realtime add table public.users;
 ```
 
-### Enable Realtime (optional, for live leaderboard)
+## 2. Auth Provider Settings
 
-Go to **Database > Replication** in your Supabase dashboard and enable replication for the `users` table.
+- Go to Authentication > Providers
+- Enable Email
+- Enable Google only if you use Google login
 
-## 🚀 Setup Instructions
+## 3. Add Environment Variables
 
-### 1. Create Supabase Project
-1. Go to [supabase.com](https://supabase.com)
-2. Create a new project
-3. Wait for setup to complete
+Copy .env.example to .env and fill:
 
-### 2. Run SQL Schema
-1. Go to SQL Editor in your Supabase dashboard
-2. Copy and paste the SQL above
-3. Click "Run" to create tables
-
-### 3. Auth Settings
-1. Go to **Authentication > Providers** in dashboard
-2. Make sure **Email** provider is enabled
-3. (Optional) Disable "Confirm email" under Email provider settings for faster testing
-
-### 4. Get API Credentials
-1. Go to Project Settings > API
-2. Copy your **Project URL**
-3. Copy your **anon/public key**
-
-### 5. Configure Your App
-1. Copy `.env.example` to `.env`
-2. Add your Supabase URL and anon key
-3. Restart your app
-
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-npm start
+```env
+EXPO_PUBLIC_SUPABASE_URL=your-project-url.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 ```
 
-### 6. Update app.json (Optional)
-You can also add Supabase config to `app.json`:
+## 4. Quick Verification Queries
 
-```json
-{
-  "expo": {
-    "extra": {
-      "supabaseUrl": "your-project-url.supabase.co",
-      "supabaseAnonKey": "your-anon-key"
-    }
-  }
-}
+Run these to verify setup:
+
+```sql
+select tablename
+from pg_tables
+where schemaname = 'public'
+  and tablename in ('users', 'daily_stats');
+
+select policyname, tablename
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('users', 'daily_stats')
+order by tablename, policyname;
+
+select * from pg_publication_tables
+where pubname = 'supabase_realtime'
+  and schemaname = 'public'
+  and tablename = 'users';
 ```
-
-## ✅ How It Works
-
-1. **Sign Up / Sign In** — email + password via Supabase Auth
-2. **Onboarding** — user picks username, emoji, city (saved to `users` table keyed by `auth.uid()`)
-3. **Auto-sync** — points, streaks, and daily stats sync to Supabase every 2 seconds
-4. **Leaderboard** — fetches all rows from `users` ordered by `total_points DESC`
-5. **Real-time** — postgres_changes subscription pushes live updates
-6. **Sign Out** — clears session and local state, returns to auth screen
-
-## 🔒 Security
-
-- The **anon key** is safe to expose in client-side code
-- RLS policies ensure users can only INSERT/UPDATE their own row (`auth.uid() = id`)
-- Leaderboard data (SELECT) is public by design
-- Passwords are handled entirely by Supabase Auth (never stored in app)
-
-## 📊 Optional: Add Real-Time Subscriptions
-
-For live leaderboard updates, add this to any component:
-
-```typescript
-import { supabase } from '@/lib/supabase';
-import { useEffect } from 'react';
-
-// Subscribe to user changes
-useEffect(() => {
-  const channel = supabase
-    .channel('users-changes')
-    .on('postgres_changes', 
-      { event: '*', schema: 'public', table: 'users' },
-      (payload) => {
-        console.log('User updated:', payload);
-        refreshLeaderboard();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, []);
-```
-
-## 🛠️ Troubleshooting
-
-**"Failed to fetch leaderboard"**
-- Check your Supabase URL and anon key
-- Verify tables were created successfully
-- Check RLS policies are enabled
-
-**"User not syncing"**
-- Make sure you completed onboarding
-- Check console for error messages
-- Verify internet connection
-
-**Leaderboard not updating**
-- App automatically syncs every 2 seconds after task changes
-- Leaderboard refreshes every 5 minutes
-- You can manually refresh by pulling down on leaderboard screen
-
----
-
-Need help? Check [Supabase Documentation](https://supabase.com/docs)
